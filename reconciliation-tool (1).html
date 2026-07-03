@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parts Reconciliation Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#101010;
+    --paper:#F2F2F2;
+    --panel:#FFFFFF;
+    --line:#DEDEDE;
+    --muted:#6B6B6B;
+    --red:#E5001C;      /* Barco red */
+    --red-dark:#A30014;
+    --amber:#B8760A;
+    --green:#2E6B3E;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  .wrap{max-width:1180px;margin:0 auto;padding:36px 24px 80px;}
+
+  header.top{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--ink); margin:-36px -24px 28px; padding:20px 24px;
+  }
+  header.top .brand{display:flex; align-items:center; gap:12px;}
+  header.top .brand .mark{
+    width:38px;height:38px;background:var(--red);border-radius:3px;
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;font-family:var(--mono);
+    letter-spacing:.02em;
+  }
+  header.top h1{font-size:19px; margin:0; letter-spacing:.01em; font-weight:700; color:#fff; text-transform:uppercase;}
+  header.top .tag{font-family:var(--mono); font-size:11px; color:#fff; opacity:.55; letter-spacing:.05em; text-transform:uppercase;}
+
+  .step-label{
+    font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--red); font-weight:600; margin-bottom:6px;
+  }
+  h2.section-title{font-size:16px; margin:0 0 4px; font-weight:700;}
+  .section-sub{font-size:13px; color:var(--muted); margin:0 0 18px;}
+
+  .upload-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:32px;}
+  @media (max-width:760px){.upload-grid{grid-template-columns:1fr;}}
+
+  .dropzone{
+    background:var(--panel); border:2px dashed var(--line); border-radius:10px;
+    padding:22px; min-height:150px; cursor:pointer; transition:.15s border-color, .15s background;
+    display:flex; flex-direction:column; gap:8px; justify-content:center;
+  }
+  .dropzone:hover{border-color:var(--red);}
+  .dropzone.has-file{border-style:solid; border-color:var(--green); background:#F5FAF6;}
+  .dropzone .dz-role{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);}
+  .dropzone .dz-title{font-size:14px; font-weight:600;}
+  .dropzone .dz-hint{font-size:12px; color:var(--muted);}
+  .dropzone input{display:none;}
+  .filepill{
+    display:inline-flex; align-items:center; gap:8px; font-size:12px; font-family:var(--mono);
+    background:#fff; border:1px solid var(--line); padding:5px 10px; border-radius:999px; width:fit-content;
+  }
+  .filepill .dot{width:7px;height:7px;border-radius:50%; background:var(--green);}
+
+  .config-panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px;
+    margin-bottom:24px; display:none;
+  }
+  .config-panel.show{display:block;}
+  .config-row{display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:14px;}
+  @media (max-width:760px){.config-row{grid-template-columns:1fr;}}
+  .config-col label{display:block; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px;}
+  .config-col select{
+    width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:6px; font-family:var(--sans);
+    font-size:13px; background:#fff; color:var(--ink);
+  }
+  .detect-line{font-size:12.5px; margin-top:4px; color:var(--muted);}
+  .detect-line b{color:var(--ink);}
+  .company-badge{
+    display:inline-block; font-family:var(--mono); font-size:11px; font-weight:600; padding:2px 8px;
+    border-radius:4px; background:var(--ink); color:#fff; letter-spacing:.03em;
+  }
+  .company-badge.warn{background:var(--amber);}
+
+  .run-btn{
+    background:var(--red); color:#fff; border:none; padding:12px 22px; border-radius:8px;
+    font-size:14px; font-weight:600; cursor:pointer; font-family:var(--sans); transition:.15s background;
+  }
+  .run-btn:hover{background:var(--red-dark);}
+  .run-btn:disabled{background:#CFC8BC; cursor:not-allowed;}
+
+  .summary-strip{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line);
+    border:1px solid var(--line); border-radius:10px; overflow:hidden; margin:28px 0;
+  }
+  @media (max-width:760px){.summary-strip{grid-template-columns:1fr 1fr;}}
+  .summary-cell{background:var(--panel); padding:16px 18px;}
+  .summary-cell .n{font-family:var(--mono); font-size:26px; font-weight:600; line-height:1;}
+  .summary-cell .l{font-size:11.5px; color:var(--muted); margin-top:6px; text-transform:uppercase; letter-spacing:.04em;}
+  .summary-cell.matched .n{color:var(--green);}
+  .summary-cell.miss2 .n{color:var(--amber);}
+  .summary-cell.miss1 .n{color:var(--red);}
+
+  .results{display:none;}
+  .results.show{display:block;}
+
+  .table-block{margin-bottom:38px;}
+  .table-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-wrap:wrap; gap:10px;}
+  .table-head .th-left{display:flex; align-items:center; gap:10px;}
+  .table-head h3{font-size:15px; margin:0; font-weight:700;}
+  .table-head .count-chip{font-family:var(--mono); font-size:11px; background:var(--ink); color:#fff; padding:2px 8px; border-radius:999px;}
+  .table-head .count-chip.miss2{background:var(--amber);}
+  .table-head .count-chip.miss1{background:var(--red);}
+  .table-note{font-size:12.5px; color:var(--muted); margin:0 0 10px;}
+  .exp-btn{
+    font-family:var(--mono); font-size:11px; border:1px solid var(--line); background:#fff; color:var(--ink);
+    padding:6px 12px; border-radius:6px; cursor:pointer;
+  }
+  .exp-btn:hover{border-color:var(--red); color:var(--red);}
+
+  .table-scroll{
+    border:1px solid var(--line); border-radius:10px; overflow:auto; max-height:480px; background:#fff;
+  }
+  table{border-collapse:collapse; width:100%; font-size:12.5px;}
+  thead th{
+    position:sticky; top:0; background:var(--ink); color:#fff; text-align:left; padding:9px 12px;
+    font-weight:600; white-space:nowrap; font-size:11.5px; letter-spacing:.02em; z-index:1;
+  }
+  thead th.from-dc{background:var(--red-dark);}
+  tbody td{padding:8px 12px; border-bottom:1px solid var(--line); white-space:nowrap; max-width:260px; overflow:hidden; text-overflow:ellipsis;}
+  tbody tr:nth-child(even){background:#FBFAF7;}
+  tbody tr:hover{background:#FCF3F0;}
+  td.pn-cell, th.pn-cell{font-family:var(--mono); font-weight:600;}
+  .empty-state{padding:30px; text-align:center; color:var(--muted); font-size:13px;}
+
+  .footer-note{font-size:12px; color:var(--muted); margin-top:40px; border-top:1px solid var(--line); padding-top:16px;}
+  .err-banner{
+    background:#FDEEEC; border:1px solid #F1B6AC; color:var(--red-dark); padding:12px 16px; border-radius:8px;
+    font-size:13px; margin-bottom:20px; display:none;
+  }
+  .err-banner.show{display:block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark">PN</div>
+      <h1>Parts Reconciliation Tool</h1>
+    </div>
+    <div class="tag">AMC &middot; RMA &middot; REGAL</div>
+  </header>
+
+  <div class="err-banner" id="errBanner"></div>
+
+  <div class="step-label">Step 1</div>
+  <h2 class="section-title">Upload your two files</h2>
+  <p class="section-sub">File 1 sets the row order and the base column set. File 2 (the DC report) contributes any extra columns and fills in the reconciliation.</p>
+
+  <div class="upload-grid">
+    <div class="dropzone" id="dz1">
+      <div class="dz-role">File 1 &middot; Primary / Base</div>
+      <div class="dz-title" id="dz1title">Click or drop your first workbook here</div>
+      <div class="dz-hint">.xlsx or .xls</div>
+      <input type="file" id="file1" accept=".xlsx,.xls,.xlsm">
+    </div>
+    <div class="dropzone" id="dz2">
+      <div class="dz-role">File 2 &middot; DC Report</div>
+      <div class="dz-title" id="dz2title">Click or drop your DC workbook here</div>
+      <div class="dz-hint">.xlsx or .xls</div>
+      <input type="file" id="file2" accept=".xlsx,.xls,.xlsm">
+    </div>
+  </div>
+
+  <div class="config-panel" id="configPanel">
+    <div class="step-label">Step 2</div>
+    <h2 class="section-title">Confirm detection</h2>
+    <p class="section-sub">The tool guesses the company and the Part Number column from each sheet's headers and contents. Override anything it got wrong.</p>
+
+    <div class="config-row">
+      <div class="config-col">
+        <label>File 1 &middot; sheet to use</label>
+        <select id="sheet1Select"></select>
+        <div class="detect-line" id="company1Line"></div>
+      </div>
+      <div class="config-col">
+        <label>File 2 &middot; sheet to use</label>
+        <select id="sheet2Select"></select>
+        <div class="detect-line" id="company2Line"></div>
+      </div>
+    </div>
+    <div class="config-row">
+      <div class="config-col">
+        <label>File 1 &middot; Part Number column</label>
+        <select id="pn1Select"></select>
+      </div>
+      <div class="config-col">
+        <label>File 2 &middot; Part Number column</label>
+        <select id="pn2Select"></select>
+      </div>
+    </div>
+
+    <button class="run-btn" id="runBtn">Join files</button>
+  </div>
+
+  <div class="results" id="results">
+    <div class="summary-strip" id="summaryStrip"></div>
+
+    <div class="table-block">
+      <div class="table-head">
+        <div class="th-left">
+          <h3>Table 1 &middot; Matched on Part Number</h3>
+          <span class="count-chip" id="chip1">0</span>
+        </div>
+        <button class="exp-btn" data-export="matched">Export .xlsx</button>
+      </div>
+      <p class="table-note">Every part number present in <b>both</b> files, in File 1's row order. Columns from File 2 that don't already exist in File 1 are appended (highlighted header).</p>
+      <div class="table-scroll" id="tbl1"></div>
+    </div>
+
+    <div class="table-block">
+      <div class="table-head">
+        <div class="th-left">
+          <h3>Table 2 &middot; In File 1 only</h3>
+          <span class="count-chip miss2" id="chip2">0</span>
+        </div>
+        <button class="exp-btn" data-export="missing2">Export .xlsx</button>
+      </div>
+      <p class="table-note">These part numbers are missing from the DC file (File 2).</p>
+      <div class="table-scroll" id="tbl2"></div>
+    </div>
+
+    <div class="table-block">
+      <div class="table-head">
+        <div class="th-left">
+          <h3>Table 3 &middot; In File 2 only</h3>
+          <span class="count-chip miss1" id="chip3">0</span>
+        </div>
+        <button class="exp-btn" data-export="missing1">Export .xlsx</button>
+      </div>
+      <p class="table-note">These part numbers are missing from File 1.</p>
+      <div class="table-scroll" id="tbl3"></div>
+    </div>
+
+    <button class="exp-btn" id="exportAllBtn" style="margin-top:4px;">Export all 3 tables as one workbook</button>
+  </div>
+
+  <div class="footer-note">
+    Everything runs locally in your browser &mdash; files are parsed client-side and are never uploaded anywhere. Part Number matching trims whitespace and ignores case.
+  </div>
+
+</div>
+
+<script>
+const PN_PATTERNS = ['partnumber','partno','partnum','part#','partnbr','pn','itemnumber','item#','itemno','materialnumber','materialno','sku','modelnumber'];
+const COMPANY_NAMES = ['AMC','REGAL','RMA'];
+
+let state = {
+  file1: null, file2: null,
+  wb1: null, wb2: null,
+  sheets1: {}, sheets2: {},  // sheetName -> {headers, rows}
+};
+
+function normHeader(h){
+  return String(h||'').toLowerCase().replace(/[^a-z0-9#]/g,'');
+}
+function guessPnColumn(headers){
+  let idx = headers.findIndex(h => PN_PATTERNS.includes(normHeader(h)));
+  if (idx === -1) idx = headers.findIndex(h => normHeader(h).includes('part') && normHeader(h).includes('num'));
+  if (idx === -1) idx = headers.findIndex(h => normHeader(h) === 'pn');
+  return idx;
+}
+function normPn(v){
+  return String(v==null?'':v).trim().toUpperCase();
+}
+function detectCompany(sheetsObj, filename){
+  const counts = {AMC:0, REGAL:0, RMA:0};
+  const re = {
+    AMC: /\bAMC\b/gi,
+    REGAL: /\bREGAL\b/gi,
+    RMA: /\bRMA\b/gi
+  };
+  for (const c of COMPANY_NAMES){
+    const m = String(filename||'').match(re[c]);
+    if (m) counts[c] += m.length * 5; // filename is a strong signal
+  }
+  for (const sheetName in sheetsObj){
+    const {headers, rows} = sheetsObj[sheetName];
+    const text = headers.join(' ') + ' ' + rows.slice(0,300).map(r=>r.join(' ')).join(' ');
+    for (const c of COMPANY_NAMES){
+      const m = text.match(re[c]);
+      if (m) counts[c] += m.length;
+    }
+  }
+  let best = null, bestN = 0;
+  for (const c of COMPANY_NAMES){
+    if (counts[c] > bestN){ best = c; bestN = counts[c]; }
+  }
+  return {best, counts};
+}
+
+function readWorkbook(file, cb){
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:true});
+      cb(null, wb);
+    }catch(err){ cb(err); }
+  };
+  reader.onerror = () => cb(new Error('Could not read file'));
+  reader.readAsArrayBuffer(file);
+}
+
+function sheetToHeadersRows(ws){
+  const raw = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
+  if (!raw.length) return {headers:[], rows:[]};
+  // find header row: first row with >=2 non-empty cells
+  let headerRowIdx = raw.findIndex(r => r.filter(c=>String(c).trim()!=='').length >= 2);
+  if (headerRowIdx === -1) headerRowIdx = 0;
+  const headers = raw[headerRowIdx].map((h,i)=> String(h).trim() || ('Column '+(i+1)));
+  const rows = raw.slice(headerRowIdx+1).filter(r => r.some(c => String(c).trim()!==''));
+  return {headers, rows};
+}
+
+function processWorkbook(wb){
+  const sheets = {};
+  wb.SheetNames.forEach(name => {
+    const {headers, rows} = sheetToHeadersRows(wb.Sheets[name]);
+    if (headers.length) sheets[name] = {headers, rows};
+  });
+  return sheets;
+}
+
+function fillSheetSelect(selectEl, sheetsObj){
+  selectEl.innerHTML = '';
+  Object.keys(sheetsObj).forEach(name => {
+    const pnIdx = guessPnColumn(sheetsObj[name].headers);
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name + (pnIdx>=0 ? '' : '  (no Part Number column detected)');
+    selectEl.appendChild(opt);
+  });
+  // prefer a sheet that has a detected PN column
+  const withPn = Object.keys(sheetsObj).find(n => guessPnColumn(sheetsObj[n].headers) >= 0);
+  if (withPn) selectEl.value = withPn;
+}
+
+function fillPnSelect(selectEl, headers){
+  selectEl.innerHTML = '';
+  headers.forEach((h,i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = h;
+    selectEl.appendChild(opt);
+  });
+  const guess = guessPnColumn(headers);
+  selectEl.value = guess >= 0 ? guess : 0;
+}
+
+function showErr(msg){
+  const b = document.getElementById('errBanner');
+  if (!msg){ b.classList.remove('show'); b.textContent=''; return; }
+  b.textContent = msg;
+  b.classList.add('show');
+}
+
+function setupDropzone(dzId, inputId, titleId, onLoaded){
+  const dz = document.getElementById(dzId);
+  const input = document.getElementById(inputId);
+  const title = document.getElementById(titleId);
+  dz.addEventListener('click', ()=> input.click());
+  dz.addEventListener('dragover', e=>{e.preventDefault(); dz.style.borderColor='var(--red)';});
+  dz.addEventListener('dragleave', e=>{dz.style.borderColor='';});
+  dz.addEventListener('drop', e=>{
+    e.preventDefault();
+    if (e.dataTransfer.files.length){ input.files = e.dataTransfer.files; handleFile(e.dataTransfer.files[0]); }
+  });
+  input.addEventListener('change', ()=>{ if(input.files.length) handleFile(input.files[0]); });
+
+  function handleFile(file){
+    showErr(null);
+    readWorkbook(file, (err, wb)=>{
+      if (err){
+        showErr(`Couldn't read "${file.name}". If this file is password-protected or IRM/DRM-encrypted, remove that protection (open it in Excel and save a copy without protection) and try again.`);
+        return;
+      }
+      dz.classList.add('has-file');
+      title.innerHTML = `<span class="filepill"><span class="dot"></span>${file.name}</span>`;
+      onLoaded(file, wb);
+    });
+  }
+}
+
+function maybeShowConfig(){
+  if (state.wb1 && state.wb2){
+    document.getElementById('configPanel').classList.add('show');
+    fillSheetSelect(document.getElementById('sheet1Select'), state.sheets1);
+    fillSheetSelect(document.getElementById('sheet2Select'), state.sheets2);
+    refreshSheet1();
+    refreshSheet2();
+  }
+}
+
+function refreshSheet1(){
+  const name = document.getElementById('sheet1Select').value;
+  const sh = state.sheets1[name];
+  fillPnSelect(document.getElementById('pn1Select'), sh.headers);
+  const det = detectCompany({[name]: sh}, state.file1.name);
+  renderCompanyLine('company1Line', det);
+}
+function refreshSheet2(){
+  const name = document.getElementById('sheet2Select').value;
+  const sh = state.sheets2[name];
+  fillPnSelect(document.getElementById('pn2Select'), sh.headers);
+  const det = detectCompany({[name]: sh}, state.file2.name);
+  renderCompanyLine('company2Line', det);
+}
+
+function renderCompanyLine(elId, det){
+  const el = document.getElementById(elId);
+  if (!det.best){
+    el.innerHTML = `<span class="company-badge warn">Company not detected</span> couldn't match AMC / RMA / REGAL in this sheet.`;
+    return;
+  }
+  el.innerHTML = `Detected company: <span class="company-badge">${det.best}</span>`;
+}
+
+setupDropzone('dz1','file1','dz1title',(file,wb)=>{
+  state.file1 = file; state.wb1 = wb; state.sheets1 = processWorkbook(wb);
+  maybeShowConfig();
+});
+setupDropzone('dz2','file2','dz2title',(file,wb)=>{
+  state.file2 = file; state.wb2 = wb; state.sheets2 = processWorkbook(wb);
+  maybeShowConfig();
+});
+
+document.getElementById('sheet1Select').addEventListener('change', refreshSheet1);
+document.getElementById('sheet2Select').addEventListener('change', refreshSheet2);
+
+let lastResult = null;
+
+document.getElementById('runBtn').addEventListener('click', ()=>{
+  showErr(null);
+  const sh1name = document.getElementById('sheet1Select').value;
+  const sh2name = document.getElementById('sheet2Select').value;
+  const sh1 = state.sheets1[sh1name];
+  const sh2 = state.sheets2[sh2name];
+  const pn1Idx = parseInt(document.getElementById('pn1Select').value,10);
+  const pn2Idx = parseInt(document.getElementById('pn2Select').value,10);
+
+  const h1 = sh1.headers, h2 = sh2.headers;
+  const rows1 = sh1.rows, rows2 = sh2.rows;
+
+  // company check
+  const c1 = detectCompany({[sh1name]: sh1}, state.file1.name);
+  const c2 = detectCompany({[sh2name]: sh2}, state.file2.name);
+  if (c1.best && c2.best && c1.best !== c2.best){
+    showErr(`Heads up: File 1 looks like ${c1.best} but File 2 looks like ${c2.best}. Double-check you uploaded matching files before trusting these results.`);
+  }
+
+  // Build a queue of file2 rows per part number (not just the first one).
+  // Rows are matched positionally per key so every row from both files ends
+  // up in exactly one table - nothing silently disappears when a part number
+  // repeats (e.g. multiple work orders against the same part).
+  const f2Queues = new Map();
+  rows2.forEach(r => {
+    const key = normPn(r[pn2Idx]);
+    if (!key) return;
+    if (!f2Queues.has(key)) f2Queues.set(key, []);
+    f2Queues.get(key).push(r);
+  });
+  const consumedFromF2 = new Set(); // row objects already claimed by Table 1
+
+  // extra columns from file2 not already in file1 (by normalized header name), excluding its own PN column
+  const h1NormSet = new Set(h1.map(normHeader));
+  const extraCols = [];
+  h2.forEach((h,i) => {
+    if (i === pn2Idx) return;
+    if (!h1NormSet.has(normHeader(h))) extraCols.push(i);
+  });
+
+  const matchedHeaders = [...h1, ...extraCols.map(i=>h2[i])];
+  const matchedRows = [];
+  const missing2Rows = [];
+  rows1.forEach(r => {
+    const key = normPn(r[pn1Idx]);
+    if (!key) return;
+    const queue = f2Queues.get(key);
+    const r2 = queue && queue.length ? queue.shift() : null; // claim the next unmatched DC row for this key
+    if (r2){
+      consumedFromF2.add(r2);
+      matchedRows.push([...r, ...extraCols.map(i=> r2[i]!==undefined? r2[i] : '')]);
+    } else {
+      missing2Rows.push(r);
+    }
+  });
+
+  // Anything left unclaimed in the per-key queues was never matched -> Table 3
+  const missing1Rows = rows2.filter(r => !consumedFromF2.has(r) && normPn(r[pn2Idx]));
+
+  lastResult = {
+    matchedHeaders, matchedRows, matchedExtraCount: extraCols.length,
+    h1, missing2Rows, pn1Idx,
+    h2, missing1Rows, pn2Idx,
+    company1: c1.best, company2: c2.best
+  };
+
+  renderResults();
+});
+
+function renderTable(container, headers, rows, pnIdx, highlightFromIdx){
+  container.innerHTML = '';
+  if (!rows.length){
+    container.innerHTML = `<div class="empty-state">No rows.</div>`;
+    return;
+  }
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const trh = document.createElement('tr');
+  headers.forEach((h,i)=>{
+    const th = document.createElement('th');
+    th.textContent = h;
+    if (i===pnIdx) th.classList.add('pn-cell');
+    if (highlightFromIdx!==undefined && i>=highlightFromIdx) th.classList.add('from-dc');
+    trh.appendChild(th);
+  });
+  thead.appendChild(trh);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    headers.forEach((h,i)=>{
+      const td = document.createElement('td');
+      let v = r[i];
+      if (v instanceof Date) v = v.toLocaleDateString();
+      td.textContent = v===undefined||v===null? '' : v;
+      if (i===pnIdx) td.classList.add('pn-cell');
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+function renderResults(){
+  const r = lastResult;
+  document.getElementById('results').classList.add('show');
+
+  document.getElementById('summaryStrip').innerHTML = `
+    <div class="summary-cell matched"><div class="n">${r.matchedRows.length}</div><div class="l">Matched part numbers</div></div>
+    <div class="summary-cell miss2"><div class="n">${r.missing2Rows.length}</div><div class="l">Missing from DC file</div></div>
+    <div class="summary-cell miss1"><div class="n">${r.missing1Rows.length}</div><div class="l">Missing from File 1</div></div>
+    <div class="summary-cell"><div class="n">${r.company1 || '?'} / ${r.company2 || '?'}</div><div class="l">Detected company (File1 / File2)</div></div>
+  `;
+
+  document.getElementById('chip1').textContent = r.matchedRows.length;
+  document.getElementById('chip2').textContent = r.missing2Rows.length;
+  document.getElementById('chip3').textContent = r.missing1Rows.length;
+
+  renderTable(document.getElementById('tbl1'), r.matchedHeaders, r.matchedRows, r.pn1Idx, r.h1.length);
+  renderTable(document.getElementById('tbl2'), r.h1, r.missing2Rows, r.pn1Idx);
+  renderTable(document.getElementById('tbl3'), r.h2, r.missing1Rows, r.pn2Idx);
+
+  document.getElementById('results').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+function excelSafeValue(v){
+  // Dates come out of SheetJS as JS Date objects (cellDates:true on read).
+  // aoa_to_sheet doesn't apply a number format automatically, so without
+  // this they'd land in the exported file as raw serial numbers instead of
+  // readable dates. Writing them as plain M/D/YYYY text sidesteps that.
+  if (v instanceof Date && !isNaN(v)){
+    return `${v.getMonth()+1}/${v.getDate()}/${v.getFullYear()}`;
+  }
+  return v===undefined||v===null? '' : v;
+}
+function downloadWorkbook(sheetsArr, filename){
+  const wb = XLSX.utils.book_new();
+  sheetsArr.forEach(({name, headers, rows}) => {
+    const aoa = [headers, ...rows.map(r => r.map(excelSafeValue))];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
+  });
+  XLSX.writeFile(wb, filename);
+}
+
+document.querySelectorAll('.exp-btn[data-export]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if (!lastResult) return;
+    const r = lastResult;
+    const type = btn.dataset.export;
+    if (type==='matched') downloadWorkbook([{name:'Matched', headers:r.matchedHeaders, rows:r.matchedRows}], 'matched_part_numbers.xlsx');
+    if (type==='missing2') downloadWorkbook([{name:'Missing_from_DC', headers:r.h1, rows:r.missing2Rows}], 'missing_from_dc_file.xlsx');
+    if (type==='missing1') downloadWorkbook([{name:'Missing_from_File1', headers:r.h2, rows:r.missing1Rows}], 'missing_from_file1.xlsx');
+  });
+});
+
+document.getElementById('exportAllBtn').addEventListener('click', ()=>{
+  if (!lastResult) return;
+  const r = lastResult;
+  downloadWorkbook([
+    {name:'Matched', headers:r.matchedHeaders, rows:r.matchedRows},
+    {name:'Missing_from_DC', headers:r.h1, rows:r.missing2Rows},
+    {name:'Missing_from_File1', headers:r.h2, rows:r.missing1Rows},
+  ], 'reconciliation_report.xlsx');
+});
+</script>
+</body>
+</html>
